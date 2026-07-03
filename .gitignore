@@ -1,0 +1,4 @@
+.direnv
+.envrc
+vivado*
+__pycache__

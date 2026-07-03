@@ -1,0 +1,12 @@
+[submodule "dep/bluecsr"]
+	path = dep/bluecsr
+	url = https://github.com/timksf/bluecsr.git
+[submodule "dep/BSVTools"]
+	path = dep/BSVTools
+	url = https://github.com/timksf/BSVTools.git
+[submodule "dep/BlueAXI"]
+	path = dep/BlueAXI
+	url = https://github.com/esa-tu-darmstadt/BlueAXI.git
+[submodule "dep/bluelens"]
+	path = dep/bluelens
+	url = https://github.com/timksf/bluelens.git
