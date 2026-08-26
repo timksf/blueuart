@@ -3,7 +3,7 @@
 package UartRegs;
 
 import FIFOF :: *;
-import BlueCSRCtx :: *;
+import BlueCSRCore :: *;
 
 interface UartRegs;
     (*always_enabled*) method Action frame_error(Bool err);
@@ -60,8 +60,8 @@ module [BlueCSRCtx_t#(32, 32)] uart_csrs#(Bool fifos)(UartRegs);
     rg_baud_pre <- csr_reg_rw('h08,     0,  0, "BAUD",      "Baud Prescaler",       "Clock cycles per UART bit. Zero is treated as one.");
 
     csr_reg_def('h0C, "STATUS", "Module status register");
-    csr_reg_w1c_evt('h0C, False, bw_frame_err, 0,   "FRERR",    "RX Frame Error",   "Last reception had malformed frame.");
-    csr_reg_w1c_evt('h0C, False, bw_ovflw_err, 1,   "OVFLW",    "RX Overflow",      "Last reception could not be stored in buffer.");
+    csr_reg_w1c('h0C, False, 0, bw_frame_err ? tagged Valid True : tagged Invalid, "FRERR", "RX Frame Error", "Last reception had malformed frame.");
+    csr_reg_w1c('h0C, False, 1, bw_ovflw_err ? tagged Valid True : tagged Invalid, "OVFLW", "RX Overflow", "Last reception could not be stored in buffer.");
     rg_tx_busy  <- csr_reg_ro('h0C, False, 8,       "TXBUSY",   "TX Busy",          "Transmitter has queued or active data.");
     rg_rx_busy  <- csr_reg_ro('h0C, False, 9,       "RXBUSY",   "RX Busy",          "Receiver is processing a frame.");
     rg_tx_ready <- csr_reg_ro('h0C, False, 10,      "TXREADY",  "TX Ready",         "TXDATA can accept a byte.");

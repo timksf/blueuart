@@ -29,7 +29,7 @@ endinterface
 
 module [Module] mkUartCore#(Integer rx_buffer, Integer tx_buffer, Bool csr_fifos)(UartCore);
 
-    BlueCSRAccess_ifc#(32, 32, UartRegs)    csrs        <- create_blue_csr(uart_csrs(csr_fifos), False);
+    BlueCSRAccess_ifc#(32, 32, 0, UartRegs) csrs        <- create_blue_csr(uart_csrs(csr_fifos), False);
     BlueCSR_AXI4Lite_ifc#(32, 32)           axi_csrs    <- mkBlueCSRAXI4LiteAdapter(csrs.external, 1, 1);
 
     Bit#(2) stop_bits = csrs.internal.ctrl_s2 ? 2 : 1;

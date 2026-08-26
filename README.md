@@ -1,6 +1,6 @@
 # BlueUART
 
-BlueUART is a small Bluespec UART block set with standalone RX/TX modules,
+BlueUART is a small Bluespec UART module set with standalone RX/TX modules,
 a CSR-controlled UART core, an AXI4-Stream bridge, and a UART-to-AXI4-Lite
 master.
 
@@ -84,7 +84,9 @@ make -C hdl \
 `MAIN_MODULE` is the path relative to `hdl/src`, without the `.bsv` suffix.
 For this script, `PROJECT_NAME` must match the synthesized Verilog top module.
 
-## UART RX
+## Modules 
+
+### UART RX
 
 - `mkUartRx` samples a serial input into a FIFO-backed receive stream.
 - Includes input synchronization, baud timing, frame/overflow pulses, and
@@ -92,13 +94,13 @@ For this script, `PROJECT_NAME` must match the synthesized Verilog top module.
 - `mkUartRxBuffered` exposes the output FIFO depth; `mkUartRx` keeps the legacy
   2-deep FIFO.
 
-## UART TX
+### UART TX
 
 - `mkUartTx` serializes FIFO-backed transmit words onto `tx`.
 - Uses the configured prescaler and one/two stop-bit mode.
 - `mkUartTxBuffered` exposes the transmit FIFO depth.
 
-## UART Core
+### UART Core
 
 - `mkUartCore` combines one RX, one TX, and a BlueCSR-backed AXI4-Lite slave.
 - CSRs control enable, prescaler, and stop-bit mode.
@@ -125,14 +127,14 @@ For UART-core builds with CSR-accessible data FIFOs, the register map is:
 When `csr_fifos` is `False`, `TXDATA` and `RXDATA` are not present; the core's
 external `receive` and `transmit` streams are used instead.
 
-## UART AXIS Bridge
+### UART AXIS Bridge
 
 - `mkUartAxisBridge` maps UART bytes to AXI4-Stream beats and AXI4-Stream beats
   to UART transmit bytes.
 - Uses internal UART RX/TX FIFOs plus AXIS read/write adapter FIFOs.
 - `mkUartAxisBridgeBuffered` exposes the UART FIFO depths.
 
-## UART AXI4-Lite Master
+### UART AXI4-Lite Master
 
 - `mkUartAxiLiteMaster` converts UART command bytes into AXI4-Lite reads and
   writes.
@@ -153,14 +155,14 @@ Status is `0x00` for AXI `OKAY`, `0x01` for any non-`OKAY` AXI response, and
 sequentially; deeper buffers absorb UART/AXI timing mismatch but do not make
 the command parser issue multiple logical commands in parallel.
 
-## Baud Generator
+### Baud Generator
 
 - `mkBaudGen` is the shared prescaler counter used by RX and TX.
 - A frame bit lasts `prescaler` clocks after load; zero is treated as one.
 - RX uses the middle-of-bit pulse for sampling; TX uses the top-of-bit pulse to
   advance serialization.
 
-## 7-Series Synthesis Overview
+## Synthesis Overview
 
 These out-of-context, post-synthesis Vivado 2025.2 reports use the BSVTools
 `vivado_tcl` target for `xc7a35tcpg236-1` at 100 MHz. They do not include I/O
