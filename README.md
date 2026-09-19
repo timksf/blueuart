@@ -184,27 +184,3 @@ use 8-bit words, one stop bit, and prescaler 868 for approximately 115200 baud.
 | UART AXI4-Lite master | `mkUsageUartAxiLiteMaster32MinUart` | 32-bit AXI, 1-deep UART/AXI buffers | 496 | 387 | 2.414 ns |
 | UART AXI4-Lite master | `mkUsageUartAxiLiteMasterMax` | 32-bit AXI, 16-deep UART, 1-deep AXI | 570 | 407 | 1.643 ns |
 
-The "max" rows are wide/deep reference configurations, not hard limits. No
-BRAM/DSPs are used.
-
-## Reproducing the Reports
-
-The synthesis-only wrappers live in `hdl/src/UartUsageAnalysis.bsv`; all usage
-analysis tops are kept in that single Bluespec file. The Vivado report script is
-`hdl/script/synth_usage_analysis.tcl`.
-
-Run one top with:
-
-```sh
-make -C hdl \
-  MAIN_MODULE=UartUsageAnalysis \
-  TOP_MODULE=mkUsageUartCoreMax \
-  PROJECT_NAME=mkUsageUartCoreMax \
-  SIM_TYPE=VERILOG \
-  PART="--part xc7a35tcpg236-1" \
-  SCRIPT="--script $PWD/hdl/script/synth_usage_analysis.tcl" \
-  vivado_tcl
-```
-
-Vivado writes reports under `hdl/build/<top>/`, for example
-`hdl/build/mkUsageUartCoreMax/mkUsageUartCoreMax_util_synth.rpt`.
