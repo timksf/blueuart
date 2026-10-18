@@ -33,6 +33,19 @@ function Stmt axi_write(AXI4_Lite_Master_Wr#(32, 32) master, Bit#(32) addr, Bit#
     endseq;
 endfunction
 
+function Stmt expect_status(AXI4_Lite_Master_Rd#(32, 32) master, Bit#(32) expected);
+    return seq
+        master.request.put(AXI4_Lite_Read_Rq_Pkg { addr: 'h0c, prot: UNPRIV_SECURE_DATA });
+        action
+            let rsp <- master.response.get;
+            if(rsp.resp != OKAY || (rsp.data & 'hc00) != expected) begin
+                $display("ERROR TestUartAxisBridgeCsr: expected availability %03h got %08h", expected, rsp.data);
+                $finish(1);
+            end
+        endaction
+    endseq;
+endfunction
+
 function AXI4_Stream_Pkg#(8, 1) axis_byte(Bit#(8) data, Bool last);
     return AXI4_Stream_Pkg {
         data: data,
@@ -47,7 +60,7 @@ endfunction
 (* synthesize *)
 module [Module] mkTestUartAxisBridgeCsr(TestHandler);
 
-    UartAxisBridgeCsr#(8, 1) dut <- mkUartAxisBridgeCsr(2, 2);
+    UartAxisBridgeCsr#(8, 1) dut <- mkUartAxisBridgeCsr(2, 2, 2, 2);
     AXI4_Stream_Rd#(8, 1) axis_sink <- mkAXI4_Stream_Rd(2);
     AXI4_Stream_Wr#(8, 1) axis_source <- mkAXI4_Stream_Wr(2);
     AXI4_Lite_Master_Wr#(32, 32) cfg_wr <- mkAXI4_Lite_Master_Wr(2);
@@ -59,6 +72,7 @@ module [Module] mkTestUartAxisBridgeCsr(TestHandler);
     mkConnection(cfg_rd.fab, dut.s_rd);
 
     Reg#(Bit#(1)) rg_rx <- mkReg(1);
+    Reg#(Bit#(8)) rg_index <- mkReg(0);
 
     rule rconn;
         dut.rx(rg_rx);
@@ -69,6 +83,8 @@ module [Module] mkTestUartAxisBridgeCsr(TestHandler);
     Stmt s = seq
         delay(5);
 
+        // S_AXIS may queue data while the UART is disabled.
+        expect_status(cfg_rd, 'h400);
         axi_write(cfg_wr, 'h08, 11);
         axi_write(cfg_wr, 'h04, 1);
 
@@ -84,6 +100,20 @@ module [Module] mkTestUartAxisBridgeCsr(TestHandler);
         axis_source.pkg.put(axis_byte(8'h7e, True));
         expect_uart_Xn1(11, tx_line, 8'h7e);
 
+        // Fill the two-entry sink and leave two beats pending at M_AXIS.
+        for(rg_index <= 0; rg_index < 4; rg_index <= rg_index + 1)
+            drive_uart_frame(11, rg_rx, 8'h40 + rg_index);
+        delay(10);
+        expect_status(cfg_rd, 'hc00);
+        for(rg_index <= 0; rg_index < 4; rg_index <= rg_index + 1) action
+            let p <- axis_sink.pkg.get;
+            if(p.data != 8'h40 + rg_index) begin
+                $display("ERROR TestUartAxisBridgeCsr: reordered data after M_AXIS stall");
+                $finish(1);
+            end
+        endaction
+        delay(5);
+        expect_status(cfg_rd, 'h400);
         $display("All tests finished successfully");
     endseq;
 

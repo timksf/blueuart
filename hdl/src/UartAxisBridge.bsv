@@ -4,9 +4,10 @@ package UartAxisBridge;
 
 import AXI4_Lite_Slave :: *;
 import AXI4_Stream :: *;
-import BlueUART :: *;
-import UartRx :: *;
-import UartTx :: *;
+import BlueCSRCore :: *;
+import BlueCSRAXI4LiteAdapter :: *;
+import UartCore :: *;
+import UartRegs :: *;
 import GetPut :: *;
 
 interface UartAxisBridge#(numeric type datawidth, numeric type userwidth);
@@ -50,7 +51,7 @@ function AXI4_Stream_Pkg#(datawidth, userwidth) uart_word_to_axis(Bit#(datawidth
     };
 endfunction
 
-module [Module] mkUartAxisBridgeBuffered#(Bit#(2) stop_bits, Bit#(16) prescaler, Integer m_axis_buffer, Integer s_axis_buffer, Integer rx_buffer, Integer tx_buffer)(UartAxisBridge#(datawidth, userwidth))
+module [Module] mkUartAxisBridge#(Bit#(2) stop_bits, Bit#(16) prescaler, Integer m_axis_buffer, Integer s_axis_buffer, Integer rx_buffer, Integer tx_buffer)(UartAxisBridge#(datawidth, userwidth))
     provisos(
         Add#(a__, 1, datawidth),
         Div#(datawidth, 8, keepwidth),
@@ -58,44 +59,31 @@ module [Module] mkUartAxisBridgeBuffered#(Bit#(2) stop_bits, Bit#(16) prescaler,
         Add#(datawidth_log, 1, datawidth_log1)
     );
 
-    UartRx#(datawidth) uart_rx <- mkUartRxBuffered(stop_bits, prescaler, rx_buffer);
-    UartTx#(datawidth) uart_tx <- mkUartTxBuffered(stop_bits, prescaler, tx_buffer);
+    UartCore_ifc#(datawidth) i_uart <- mkUartCore(True, stop_bits, prescaler, rx_buffer, tx_buffer);
 
-    AXI4_Stream_Wr#(datawidth, userwidth) axis_out <- mkAXI4_Stream_Wr(m_axis_buffer);
-    AXI4_Stream_Rd#(datawidth, userwidth) axis_in <- mkAXI4_Stream_Rd(s_axis_buffer);
+    AXI4_Stream_Wr#(datawidth, userwidth) i_axis_out <- mkAXI4_Stream_Wr(m_axis_buffer);
+    AXI4_Stream_Rd#(datawidth, userwidth) i_axis_in <- mkAXI4_Stream_Rd(s_axis_buffer);
 
-    rule rrx_to_axis;
-        let data <- uart_rx.receive.get();
-        axis_out.pkg.put(uart_word_to_axis(data));
+    rule r_rx_to_axis;
+        let data <- i_uart.receive.get();
+        i_axis_out.pkg.put(uart_word_to_axis(data));
     endrule
 
-    rule raxis_to_tx;
-        let data <- axis_in.pkg.get();
-        uart_tx.transmit.put(data.data);
+    rule r_axis_to_tx;
+        let data <- i_axis_in.pkg.get();
+        i_uart.transmit.put(data.data);
     endrule
 
-    method rx = uart_rx.rx;
-    method tx = uart_tx.tx;
-    method rx_busy = uart_rx.busy;
-    method tx_busy = uart_tx.busy;
+    method rx = i_uart.rx;
+    method tx = i_uart.tx;
+    method rx_busy = i_uart.rx_busy;
+    method tx_busy = i_uart.tx_busy;
 
-    interface m_axis = axis_out.fab;
-    interface s_axis = axis_in.fab;
+    interface m_axis = i_axis_out.fab;
+    interface s_axis = i_axis_in.fab;
 endmodule
 
-module [Module] mkUartAxisBridge#(Bit#(2) stop_bits, Bit#(16) prescaler, Integer m_axis_buffer, Integer s_axis_buffer)(UartAxisBridge#(datawidth, userwidth))
-    provisos(
-        Add#(a__, 1, datawidth),
-        Div#(datawidth, 8, keepwidth),
-        Log#(datawidth, datawidth_log),
-        Add#(datawidth_log, 1, datawidth_log1)
-    );
-
-    let bridge <- mkUartAxisBridgeBuffered(stop_bits, prescaler, m_axis_buffer, s_axis_buffer, 2, 2);
-    return bridge;
-endmodule
-
-module [Module] mkUartAxisBridgeCsrBuffered#(Integer m_axis_buffer, Integer s_axis_buffer, Integer rx_buffer, Integer tx_buffer)(UartAxisBridgeCsr#(datawidth, userwidth))
+module [Module] mkUartAxisBridgeCsr#(Integer m_axis_buffer, Integer s_axis_buffer, Integer rx_buffer, Integer tx_buffer)(UartAxisBridgeCsr#(datawidth, userwidth))
     provisos(
         Add#(datawidth, 0, 8),
         Div#(datawidth, 8, keepwidth),
@@ -103,44 +91,47 @@ module [Module] mkUartAxisBridgeCsrBuffered#(Integer m_axis_buffer, Integer s_ax
         Add#(datawidth_log, 1, datawidth_log1)
     );
 
-    UartCore uart <- mkUartCore(rx_buffer, tx_buffer, False);
-    
-    AXI4_Stream_Wr#(datawidth, userwidth) axis_out <- mkAXI4_Stream_Wr(m_axis_buffer);
-    AXI4_Stream_Rd#(datawidth, userwidth) axis_in <- mkAXI4_Stream_Rd(s_axis_buffer);
+    BlueCSRAccess_ifc#(32, 32, 0, UartControlRegs_ifc) i_csrs <-
+        create_blue_csr(uart_control_csrs, False);
+    BlueCSR_AXI4Lite_ifc#(32, 32, 0) i_axi_csrs <- mkBlueCSRAXI4LiteAdapter(i_csrs.external, 1, 1);
+    Bit#(2) stop_bits = i_csrs.internal.ctrl_s2 ? 2 : 1;
+    UartCore_ifc#(datawidth) i_uart <- mkUartCore(
+        i_csrs.internal.ctrl_en, stop_bits, i_csrs.internal.prescaler, rx_buffer, tx_buffer);
 
-    rule rrx_to_axis;
-        let data <- uart.receive.get();
-        axis_out.pkg.put(uart_word_to_axis(data));
+    AXI4_Stream_Wr#(datawidth, userwidth) i_axis_out <- mkAXI4_Stream_Wr(m_axis_buffer);
+    AXI4_Stream_Rd#(datawidth, userwidth) i_axis_in <- mkAXI4_Stream_Rd(s_axis_buffer);
+
+    rule r_errors;
+        i_csrs.internal.frame_error(i_uart.frame_error);
+        i_csrs.internal.ovflw_error(i_uart.ovflw_error);
     endrule
 
-    rule raxis_to_tx;
-        let data <- axis_in.pkg.get();
-        uart.transmit.put(data.data);
+    rule r_status;
+        i_csrs.internal.rx_busy(i_uart.rx_busy);
+        i_csrs.internal.tx_busy(i_uart.tx_busy);
+        i_csrs.internal.rx_valid(i_axis_out.fab.tvalid);
+        i_csrs.internal.tx_ready(i_axis_in.fab.tready);
     endrule
 
-    method Action rx(Bit#(1) value);
-        uart.rx._write(value);
-    endmethod
-    method tx = uart.tx._read;
-    method rx_busy = uart.rx_busy;
-    method tx_busy = uart.tx_busy;
+    rule r_rx_to_axis;
+        let data <- i_uart.receive.get();
+        i_axis_out.pkg.put(uart_word_to_axis(data));
+    endrule
 
-    interface m_axis = axis_out.fab;
-    interface s_axis = axis_in.fab;
-    interface s_rd = uart.s_rd;
-    interface s_wr = uart.s_wr;
-endmodule
+    rule r_axis_to_tx;
+        let data <- i_axis_in.pkg.get();
+        i_uart.transmit.put(data.data);
+    endrule
 
-module [Module] mkUartAxisBridgeCsr#(Integer m_axis_buffer, Integer s_axis_buffer)(UartAxisBridgeCsr#(datawidth, userwidth))
-    provisos(
-        Add#(datawidth, 0, 8),
-        Div#(datawidth, 8, keepwidth),
-        Log#(datawidth, datawidth_log),
-        Add#(datawidth_log, 1, datawidth_log1)
-    );
+    method rx = i_uart.rx;
+    method tx = i_uart.tx;
+    method rx_busy = i_uart.rx_busy;
+    method tx_busy = i_uart.tx_busy;
 
-    let bridge <- mkUartAxisBridgeCsrBuffered(m_axis_buffer, s_axis_buffer, 2, 2);
-    return bridge;
+    interface m_axis = i_axis_out.fab;
+    interface s_axis = i_axis_in.fab;
+    interface s_rd = i_axi_csrs.s_rd;
+    interface s_wr = i_axi_csrs.s_wr;
 endmodule
 
 endpackage

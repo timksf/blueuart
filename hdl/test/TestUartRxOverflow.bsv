@@ -16,7 +16,7 @@ module [Module] mkTestUartRxOverflow(TestHelper::TestHandler);
     Reg#(Bit#(1)) rg_rx <- mkReg(1);
     Reg#(Bool) rg_overflow <- mkReg(False);
 
-    UartRx#(8) dut <- mkUartRx(rg_stop_bits, rg_prescaler);
+    UartRx#(8) dut <- mkUartRx(rg_stop_bits, rg_prescaler, 2);
 
     rule rconn;
         dut.rx(rg_rx);

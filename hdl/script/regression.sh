@@ -14,8 +14,10 @@ default_tests=(
     TestUartTx
     TestUartRxModes
     TestUartRxOverflow
+    TestUartRxHold
     TestUartLoopback
     TestUartCore
+    TestUartCsr
     TestUartAxisBridge
     TestUartAxisBridgeCsr
     TestUartAxiLiteMaster

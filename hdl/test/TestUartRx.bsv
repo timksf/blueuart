@@ -3,6 +3,7 @@
 package TestUartRx;
 
 import StmtFSM :: *;
+import FIFOF :: *;
 import GetPut :: *;
 import TestHelper :: *;
 
@@ -15,13 +16,19 @@ module [Module] mkTestUartRx(TestHelper::TestHandler);
     Reg#(Bit#(2))   rg_stop_bits <- mkReg(1);
     Reg#(Bit#(16))  rg_prescaler <- mkReg(11);
 
-    UartRx#(8) dut <- mkUartRx(rg_stop_bits, rg_prescaler);
+    UartRx#(8) dut <- mkUartRx(rg_stop_bits, rg_prescaler, 2);
+    FIFOF#(Bit#(8)) f_observed <- mkSizedFIFOF(4);
     Reg#(Bit#(1)) rg_rx <- mkReg(1);
     Reg#(Bool) rg_frame_error <- mkReg(False);
     Reg#(Bool) rg_overflow <- mkReg(False);
 
     rule rconn;
         dut.rx(rg_rx);
+    endrule
+
+    rule r_observe;
+        let data <- dut.receive.get;
+        f_observed.enq(data);
     endrule
 
     rule rcapture_errors;
@@ -35,7 +42,8 @@ module [Module] mkTestUartRx(TestHelper::TestHandler);
         delay(10);
         drive_uart_frame(11, rg_rx, 8'h55);
         action
-            let received <- dut.receive.get();
+            let received = f_observed.first;
+            f_observed.deq;
             if(received != 8'h55) begin
                 $display("ERROR TestUartRx: expected 55, received %02h", received);
                 $finish;
@@ -43,7 +51,7 @@ module [Module] mkTestUartRx(TestHelper::TestHandler);
         endaction
         delay(20);
         action
-            if(dut.data_valid) begin
+            if(f_observed.notEmpty) begin
                 $display("ERROR TestUartRx: duplicate byte was queued");
                 $finish;
             end
@@ -57,7 +65,7 @@ module [Module] mkTestUartRx(TestHelper::TestHandler);
                 $display("ERROR TestUartRx: framing error was not reported");
                 $finish;
             end
-            if(dut.data_valid) begin
+            if(f_observed.notEmpty) begin
                 $display("ERROR TestUartRx: malformed frame was queued");
                 $finish;
             end

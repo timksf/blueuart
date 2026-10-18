@@ -25,7 +25,7 @@ endfunction
 (* synthesize *)
 module [Module] mkTestUartAxisBridge(TestHandler);
 
-    UartAxisBridge#(8, 1) dut <- mkUartAxisBridge(1, 11, 2, 2);
+    UartAxisBridge#(8, 1) dut <- mkUartAxisBridge(1, 11, 2, 2, 2, 2);
     AXI4_Stream_Rd#(8, 1) axis_sink <- mkAXI4_Stream_Rd(2);
     AXI4_Stream_Wr#(8, 1) axis_source <- mkAXI4_Stream_Wr(2);
 

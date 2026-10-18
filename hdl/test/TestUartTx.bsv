@@ -15,7 +15,7 @@ module [Module] mkTestUartTx(TestHelper::TestHandler);
     Reg#(Bit#(2))  rg_stop_bits <- mkReg(1);
     Reg#(Bit#(16)) rg_prescaler <- mkReg(11);
 
-    UartTx#(8) dut <- mkUartTx(rg_stop_bits, rg_prescaler);
+    UartTx#(8) dut <- mkUartTx(rg_stop_bits, rg_prescaler, 2);
 
     function Bit#(1) tx_line() = dut.tx();
 

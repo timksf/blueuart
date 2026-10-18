@@ -3,10 +3,10 @@
 ###
 # DO NOT CHANGE
 ###
-TOP_MODULE=mkUartCore
+TOP_MODULE=mkUsageUartCsrMin
 TESTBENCH_MODULE=mkTestbench
 IGNORE_MODULES=mkTestbench mkTestsMainTest
-MAIN_MODULE=BlueUART
+MAIN_MODULE=UartUsageAnalysis
 TESTBENCH_FILE=test/Testbench.bsv
 TEST_DIR=$(CURDIR)/test
 
@@ -54,7 +54,7 @@ RUN_FLAGS+=-V dump.vcd
 TYPED_VCD?=build/dump.typed.vcd
 STRESS_TYPED_VCD?=build/wave_types.typed.vcd
 BLUELENS?=$(CURDIR)/../dep/bluelens/annotate_bsv_vcd.tcl
-REGRESSION_TESTS?=TestBaudGen TestUartRx TestUartTx TestUartRxModes TestUartRxOverflow TestUartLoopback TestUartCore TestUartAxisBridge TestUartAxisBridgeCsr TestUartAxiLiteMaster
+REGRESSION_TESTS?=TestBaudGen TestUartRx TestUartTx TestUartRxModes TestUartRxOverflow TestUartRxHold TestUartLoopback TestUartCore TestUartCsr TestUartAxisBridge TestUartAxisBridgeCsr TestUartAxiLiteMaster
 
 # Add additional parameters for IP-XACT generation. Passed directly to Vivado.
 # Any valid TCL during packaging is allowed
@@ -84,30 +84,17 @@ endif
 # Do not change: Include base makefile
 include $(BSV_TOOLS)/scripts/rules.mk
 
-.PHONY: wave_typed sim_typed_vcd
-wave_typed: sim_typed_vcd
-
 .PHONY: regression
 regression:
 	@REGRESSION_TESTS="$(REGRESSION_TESTS)" bash $(CURDIR)/script/regression.sh
 
-sim_typed_vcd:
-	$(MAKE) RUN_TEST=$(RUN_TEST) TEST_TOP=$(TEST_TOP) sim
-	cd $(CURDIR)/.. && bluetcl $(BLUELENS) \
-		--top $(TEST_TOP) \
-		--build hdl/build \
-		--vcd hdl/build/dump.vcd \
-		--out hdl/$(TYPED_VCD) \
-		--hide-source \
-		--include '/*'
+CSR_DOC_BUILD=$(abspath $(BUILDDIR)/csr-docs)
+CSR_DOC_PATH=+:$(CURDIR)/src:$(CURDIR)/../dep/bluecsr/src
 
-.PHONY: wave_types
-wave_types:
-	$(MAKE) RUN_TEST=TestWaveTypes sim
-	cd $(CURDIR)/.. && bluetcl $(BLUELENS) \
-		--top mkTestWaveTypes \
-		--build hdl/build \
-		--vcd hdl/build/dump.vcd \
-		--out hdl/$(STRESS_TYPED_VCD) \
-		--hide-source \
-		--include '/rg_*'
+.PHONY: csr_docs
+csr_docs:
+	mkdir -p $(CSR_DOC_BUILD)
+	$(BSV) -p $(CSR_DOC_PATH) -bdir $(CSR_DOC_BUILD) -simdir $(CSR_DOC_BUILD) -sim -u -g mkUartCSRMarkdown test/DocUart.bsv
+	$(BSV) -p $(CSR_DOC_PATH) -bdir $(CSR_DOC_BUILD) -simdir $(CSR_DOC_BUILD) -sim -e mkUartCSRMarkdown -o $(CSR_DOC_BUILD)/mkUartCSRMarkdown
+	cd $(CSR_DOC_BUILD) && ./mkUartCSRMarkdown
+	python3 script/update_csr_readme.py $(CSR_DOC_BUILD)/register-map.md ../README.md

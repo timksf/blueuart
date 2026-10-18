@@ -46,7 +46,7 @@ function Bit#(8) response_status(AXI4_Lite_Response response);
     return response == OKAY ? 8'h00 : 8'h01;
 endfunction
 
-module mkUartAxiLiteMasterBuffered#(Bit#(2) stop_bits, Bit#(16) prescaler, Integer rd_buffer, Integer wr_buffer, Integer rx_buffer, Integer tx_buffer)(UartAxiLiteMaster#(addrwidth, datawidth))
+module mkUartAxiLiteMaster#(Bit#(2) stop_bits, Bit#(16) prescaler, Integer rd_buffer, Integer wr_buffer, Integer rx_buffer, Integer tx_buffer)(UartAxiLiteMaster#(addrwidth, datawidth))
     provisos(
         Add#(a__, 1, addrwidth),
         Add#(b__, 1, datawidth),
@@ -58,8 +58,8 @@ module mkUartAxiLiteMasterBuffered#(Bit#(2) stop_bits, Bit#(16) prescaler, Integ
         Add#(uart_log, 1, uart_log1)
     );
 
-    UartRx#(8) uart_rx <- mkUartRxBuffered(stop_bits, prescaler, rx_buffer);
-    UartTx#(8) uart_tx <- mkUartTxBuffered(stop_bits, prescaler, tx_buffer);
+    UartRx#(8) uart_rx <- mkUartRx(stop_bits, prescaler, rx_buffer);
+    UartTx#(8) uart_tx <- mkUartTx(stop_bits, prescaler, tx_buffer);
 
     AXI4_Lite_Master_Rd#(addrwidth, datawidth) m_rd_inst <- mkAXI4_Lite_Master_Rd(rd_buffer);
     AXI4_Lite_Master_Wr#(addrwidth, datawidth) m_wr_inst <- mkAXI4_Lite_Master_Wr(wr_buffer);
@@ -173,22 +173,6 @@ module mkUartAxiLiteMasterBuffered#(Bit#(2) stop_bits, Bit#(16) prescaler, Integ
 
     interface m_rd = m_rd_inst.fab;
     interface m_wr = m_wr_inst.fab;
-endmodule
-
-module mkUartAxiLiteMaster#(Bit#(2) stop_bits, Bit#(16) prescaler, Integer rd_buffer, Integer wr_buffer)(UartAxiLiteMaster#(addrwidth, datawidth))
-    provisos(
-        Add#(a__, 1, addrwidth),
-        Add#(b__, 1, datawidth),
-        Add#(c__, 8, addrwidth),
-        Add#(d__, 8, datawidth),
-        Div#(addrwidth, 8, addrbytes),
-        Div#(datawidth, 8, databytes),
-        Log#(8, uart_log),
-        Add#(uart_log, 1, uart_log1)
-    );
-
-    let master <- mkUartAxiLiteMasterBuffered(stop_bits, prescaler, rd_buffer, wr_buffer, 2, 2);
-    return master;
 endmodule
 
 endpackage

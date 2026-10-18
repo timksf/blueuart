@@ -16,7 +16,7 @@ module [Module] mkTestUartRxModes(TestHelper::TestHandler);
     Reg#(Bit#(16))  rg_prescaler    <- mkReg(11);
     Reg#(Bit#(1))   rg_rx           <- mkReg(1);
 
-    UartRx#(8) dut <- mkUartRx(rg_stop_bits, rg_prescaler);
+    UartRx#(8) dut <- mkUartRx(rg_stop_bits, rg_prescaler, 2);
 
     rule rconn;
         dut.rx(rg_rx);

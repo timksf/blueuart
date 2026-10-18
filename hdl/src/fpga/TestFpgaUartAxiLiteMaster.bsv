@@ -3,7 +3,8 @@
 package TestFpgaUartAxiLiteMaster;
 
 import UartAxiLiteMaster :: *;
-import BlueCSR :: *;
+import BlueCSRCore :: *;
+import BlueCSRAXI4LiteAdapter :: *;
 import Clocks :: *;
 import Connectable :: *;
 import FIFOF :: *;
@@ -88,9 +89,9 @@ module mkUartAxiLiteMasterFpga(UartAxiLiteMasterFpga);
 
     Reset rst <- mkSTARTUPE2EOSReset;
 
-    UartAxiLiteMaster#(32, 32) bridge <- mkUartAxiLiteMaster(1, 104, 2, 2, reset_by rst);
-    BlueCSRAccess_ifc#(32, 32, DummyUartAxiLiteCsrs) csrs <- create_blue_csr(dummy_uart_axi_lite_csrs, False, reset_by rst);
-    BlueCSR_AXI4Lite_ifc#(32, 32) axi_csrs <- mkBlueCSRAXI4LiteAdapter(csrs.external, 1, 1, reset_by rst);
+    UartAxiLiteMaster#(32, 32) bridge <- mkUartAxiLiteMaster(1, 104, 2, 2, 2, 2, reset_by rst);
+    BlueCSRAccess_ifc#(32, 32, 0, DummyUartAxiLiteCsrs) csrs <- create_blue_csr(dummy_uart_axi_lite_csrs, False, reset_by rst);
+    BlueCSR_AXI4Lite_ifc#(32, 32, 0) axi_csrs <- mkBlueCSRAXI4LiteAdapter(csrs.external, 1, 1, reset_by rst);
 
     mkConnection(bridge.m_rd, axi_csrs.s_rd);
     mkConnection(bridge.m_wr, axi_csrs.s_wr);

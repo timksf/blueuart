@@ -24,7 +24,7 @@ module mkUartAxisBridgeLoopback(UartAxisBridgeLoopback);
 
     Reset rst <- mkSTARTUPE2EOSReset;
 
-    UartAxisBridge#(8, 1) bridge <- mkUartAxisBridge(1, 104, 16, 16, reset_by rst);
+    UartAxisBridge#(8, 1) bridge <- mkUartAxisBridge(1, 104, 16, 16, 2, 2, reset_by rst);
 
     mkConnection(bridge.m_axis, bridge.s_axis);
 

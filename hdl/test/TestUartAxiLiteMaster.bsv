@@ -76,7 +76,7 @@ endfunction
 (* synthesize *)
 module [Module] mkTestUartAxiLiteMaster(TestHandler);
 
-    UartAxiLiteMaster#(8, 8) dut <- mkUartAxiLiteMaster(1, 11, 2, 2);
+    UartAxiLiteMaster#(8, 8) dut <- mkUartAxiLiteMaster(1, 11, 2, 2, 2, 2);
     AXI4_Lite_Slave_Rd#(8, 8) slave_rd <- mkAXI4_Lite_Slave_Rd(2);
     AXI4_Lite_Slave_Wr#(8, 8) slave_wr <- mkAXI4_Lite_Slave_Wr(2);
 

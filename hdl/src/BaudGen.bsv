@@ -13,33 +13,38 @@ endinterface
 //strictly integer division
 module mkBaudGen#(Bool mid_early)(BaudGen#(w));
 
-    Reg#(Bit#(w)) rg_top[2] <- mkCReg(2, 0);
-    Reg#(Bit#(w)) rg_cnt[2] <- mkCReg(2, 0);
+    Reg#(Bit#(w))   rg_top  <- mkReg(0);
+    Reg#(Bit#(w))   rg_cnt  <- mkReg(0);
+    RWire#(Bit#(w)) rw_load <- mkRWire;
+    PulseWire      pw_hold <- mkPulseWire;
 
-    Wire#(Bool) dw_hold <- mkDWire(False);
+    Bit#(w) hlf = rg_top >> 1;
+    Bit#(w) mid = (unpack(rg_top[0]) || !mid_early) ? (hlf + 1) : hlf;
 
-    Bit#(w) hlf = rg_top[1] >> 1;
-    Bit#(w) mid = (unpack(rg_top[1][0]) || !mid_early) ? (hlf + 1) : hlf;
-
-    rule r_roll if(!dw_hold);
-        if(rg_cnt[1] == rg_top[1]-1)
-            rg_cnt[1] <= 0;
-        else
-            rg_cnt[1] <= rg_cnt[1] + 1;
+    // Timing outputs describe registered state. A load takes effect at the edge,
+    // avoiding a configuration-to-status scheduling path through a CReg port.
+    rule r_roll;
+        if(rw_load.wget matches tagged Valid .prescaler) begin
+            rg_top <= prescaler == 0 ? 1 : prescaler;
+            rg_cnt <= 0;
+        end else if(!pw_hold) begin
+            if(rg_cnt == rg_top - 1)
+                rg_cnt <= 0;
+            else
+                rg_cnt <= rg_cnt + 1;
+        end
     endrule
 
-    method top      = rg_top[1] == 0    || rg_cnt[1] == rg_top[1]-1;
-    method middle   = mid == 0          || rg_cnt[1] == mid-1;
+    method top    = rg_top == 0 || rg_cnt == rg_top - 1;
+    method middle = mid == 0 || rg_cnt == mid - 1;
 
-    method hold = action
-        dw_hold <= True;
-    endaction;
+    method Action hold;
+        pw_hold.send;
+    endmethod
 
-    method set_prescaler(p) = action
-        dw_hold     <= True;
-        rg_top[0]   <= (p == 0) ? 1 : p;
-        rg_cnt[0]   <= 0;
-    endaction;
+    method Action set_prescaler(Bit#(w) p);
+        rw_load.wset(p);
+    endmethod
 
 endmodule
 

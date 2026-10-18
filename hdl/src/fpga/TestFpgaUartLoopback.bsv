@@ -30,8 +30,8 @@ module mkUartLoopback(UartLoopback);
 
     Reset rst <- mkSTARTUPE2EOSReset;
 
-    UartRx#(8) uart_rx     <- mkUartRx(stop_bits, prescaler, reset_by rst);
-    UartTx#(8) uart_tx     <- mkUartTx(stop_bits, prescaler, reset_by rst);
+    UartRx#(8) uart_rx     <- mkUartRx(stop_bits, prescaler, 2, reset_by rst);
+    UartTx#(8) uart_tx     <- mkUartTx(stop_bits, prescaler, 2, reset_by rst);
     FIFOF#(Bit#(8)) loopback_fifo   <- mkSizedFIFOF(16, reset_by rst);
 
     rule rcapture;

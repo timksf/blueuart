@@ -4,7 +4,6 @@ package TestFpgaUartCoreLoopback;
 
 import Clocks :: *;
 import Connectable :: *;
-import FIFOF :: *;
 import GetPut :: *;
 import StmtFSM :: *;
 
@@ -30,7 +29,7 @@ module mkUartCoreLoopback(UartCoreLoopback);
 
     Reset rst <- mkSTARTUPE2EOSReset;
 
-    UartCore uart <- mkUartCore(2, 2, True, reset_by rst);
+    UartCsr_ifc uart <- mkUartCsr(16, 16, reset_by rst);
 
     AXI4_Lite_Master_Wr#(32, 32) m_wr <- mkAXI4_Lite_Master_Wr(2, reset_by rst);
     AXI4_Lite_Master_Rd#(32, 32) m_rd <- mkAXI4_Lite_Master_Rd(2, reset_by rst);
@@ -40,7 +39,8 @@ module mkUartCoreLoopback(UartCoreLoopback);
 
     Reg#(Bool)      rg_config_done      <- mkReg(False, reset_by rst);
     Reg#(Bool)      rg_axi_error        <- mkReg(False, reset_by rst);
-    FIFOF#(Bit#(8)) f_loopback          <- mkSizedFIFOF(16, reset_by rst);
+    Reg#(Bit#(32))  rg_status           <- mkReg(0, reset_by rst);
+    Reg#(Bit#(8))   rg_data             <- mkRegU(reset_by rst);
 
     Stmt configure = seq
         delay(4);
@@ -71,25 +71,50 @@ module mkUartCoreLoopback(UartCoreLoopback);
             if(rsp.resp != OKAY) rg_axi_error <= True;
             rg_config_done <= rsp.resp == OKAY && !rg_axi_error;
         endaction
+        // Echo through the public CSR interface; the peripheral owns its queues.
+        while(True) seq
+            action
+                m_rd.request.put(AXI4_Lite_Read_Rq_Pkg {
+                    addr: 'h0c, prot: UNPRIV_SECURE_DATA
+                });
+            endaction
+            action
+                let rsp <- m_rd.response.get();
+                rg_status <= rsp.data;
+                if(rsp.resp != OKAY) rg_axi_error <= True;
+            endaction
+            if(rg_status[11:10] == 2'b11 && !rg_axi_error) seq
+                action
+                    m_rd.request.put(AXI4_Lite_Read_Rq_Pkg {
+                        addr: 'h14, prot: UNPRIV_SECURE_DATA
+                    });
+                endaction
+                action
+                    let rsp <- m_rd.response.get();
+                    rg_data <= truncate(rsp.data);
+                    if(rsp.resp != OKAY) rg_axi_error <= True;
+                endaction
+                action
+                    m_wr.request.put(AXI4_Lite_Write_Rq_Pkg {
+                        addr: 'h10, data: zeroExtend(rg_data), strb: 1,
+                        prot: UNPRIV_SECURE_DATA
+                    });
+                endaction
+                action
+                    let rsp <- m_wr.response.get();
+                    if(rsp.resp != OKAY) rg_axi_error <= True;
+                endaction
+            endseq
+        endseq
     endseq;
 
     mkAutoFSM(configure, reset_by rst);
 
-    rule rreceive if(rg_config_done && !rg_axi_error);
-        let data <- uart.receive.get();
-        f_loopback.enq(data);
-    endrule
-
-    rule rtransmit if(rg_config_done && !rg_axi_error);
-        uart.transmit.put(f_loopback.first);
-        f_loopback.deq();
-    endrule
-
     method Action rxd(Bit#(1) value);
-        uart.rx._write(value);
+        uart.rx(value);
     endmethod
 
-    method Bit#(1) txd = uart.tx._read();
+    method Bit#(1) txd = uart.tx();
     method Bit#(2) led = {pack(rg_axi_error), pack(rg_config_done)};
 
 endmodule

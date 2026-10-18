@@ -6,10 +6,12 @@ import UartRx :: *;
 import UartTx :: *;
 import UartRegs :: *;
 import UartCore :: *;
+import UartCsr :: *;
 
 export UartRx :: *;
 export UartTx :: *;
 export UartRegs :: *;
 export UartCore :: *;
+export UartCsr :: *;
 
 endpackage

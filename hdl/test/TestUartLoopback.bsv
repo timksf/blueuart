@@ -15,8 +15,8 @@ module [Module] mkTestUartLoopback(TestHelper::TestHandler);
     Reg#(Bit#(2))   rg_stop_bits <- mkReg(1);
     Reg#(Bit#(16))  rg_prescaler <- mkReg(11);
 
-    UartTx#(8) uart_tx <- mkUartTx(rg_stop_bits, rg_prescaler);
-    UartRx#(8) uart_rx <- mkUartRx(rg_stop_bits, rg_prescaler);
+    UartTx#(8) uart_tx <- mkUartTx(rg_stop_bits, rg_prescaler, 2);
+    UartRx#(8) uart_rx <- mkUartRx(rg_stop_bits, rg_prescaler, 2);
 
     rule rloopback;
         uart_rx.rx(uart_tx.tx);

@@ -1,74 +1,143 @@
 # BlueUART
 
-BlueUART is a small Bluespec UART module set with standalone RX/TX modules,
-a CSR-controlled UART core, an AXI4-Stream bridge, and a UART-to-AXI4-Lite
-master.
+Bluespec UART RX/TX blocks, a plain UART core, an AXI4-Lite CSR peripheral,
+and bridges to AXI4-Stream and AXI4-Lite. Sources are in `hdl/src`, tests in
+`hdl/test`, and FPGA examples in `hdl/src/fpga`.
 
-Reusable modules are in `hdl/src`. Tests, FPGA wrapper tops, and scripts are
-kept under `hdl/test`, `hdl/src/fpga`, and `hdl/script`.
-
-## Repository Layout
-
-| Path | Contents |
-| --- | --- |
-| `hdl/src` | Bluespec UART blocks and usage-analysis wrappers. |
-| `hdl/src/fpga` | 7-series FPGA wrapper tops. |
-| `hdl/test` | Bluesim test modules driven by the shared `Testbench` wrapper. |
-| `hdl/script` | Regression, Vivado, serial loopback, and UART AXI4-Lite scripts. |
-| `dep` | Git submodules for BSVTools, BlueAXI, BlueCSR, and BlueLens. |
-| `nix` | Optional shell with Bluespec, Yosys, Icarus Verilog, and Python serial tooling. |
-
-## Toolchain
-
-The Makefile uses BSVTools and the BlueAXI/BlueCSR submodules:
+## Build and test
 
 ```sh
 git submodule update --init --recursive
-```
-
-Optional Nix shell:
-
-```sh
 nix develop nix
-```
-
-Vivado is only needed for the FPGA scripts and the 7-series synthesis reports.
-
-Generated files are written under `hdl/build`. If BSC reports a `.bo`
-binary-version mismatch after changing toolchains, remove the cached build
-products:
-
-```sh
-make -C hdl clean
-```
-
-## Simulation
-
-Single test:
-
-```sh
-make -C hdl RUN_TEST=TestUartRx sim
-```
-
-Default regression set:
-
-```sh
 make -C hdl regression
 ```
 
-Regression logs are written to `hdl/build/regression`.
+- BSVTools, BlueAXI and BlueCSR are included as submodules
+- BlueCSR's AXI adapter also needs BlueLib on the BSV search path.
+- Run a test with `make -C hdl RUN_TEST=TestUartRxHold sim`.
 
-## Examples
+## UART modules
 
-### Cmod A7 FPGA
+Import `BlueUART::*` for the RX, TX, plain core and CSR peripheral:
 
-`hdl/script/constr.xdc` contains the Cmod A7 pinout used for FPGA tests:
-12 MHz clock on `clk_12`, two LEDs, and the USB-UART pins `uart_rxd` and
-`uart_txd`.
+```bsv
+UartRx#(8) i_rx           <- mkUartRx(stop_bits, prescaler, rx_depth);
+UartTx#(8) i_tx           <- mkUartTx(stop_bits, prescaler, tx_depth);
+UartCore_ifc#(8) i_uart   <- mkUartCore(enable, stop_bits, prescaler, rx_depth, tx_depth);
+UartCsr_ifc i_peripheral  <- mkUartCsr(rx_depth, tx_depth);
+```
 
-`hdl/script/synth_fpga.tcl` builds FPGA tops. It reads `constr.xdc`, uses
-`PROJECT_NAME` as the Vivado top, then runs synthesis, optimization, placement,
-routing, physical optimization, report generation, and bitstream generation.
+RX and the plain core expose a guarded `Get` named `receive`, TX and the plain
+core expose a guarded `Put` named `transmit`. 
+The CSR peripheral transfers data through registers. 
+Serial pins use `rx`/`tx` methods. Each module provides busy status, RX and the plain core also expose framing and overflow error pulses.
+
+One or two stop bits are supported. The 16-bit prescaler sets clocks per bit;
+zero means one clock. Settings are captured at frame start. 
+As an example, 868 clocks per bit gives about 115200 baud at 100 MHz. 
+RX includes a two-register input synchronizer.
+
+Disabling the plain core masks RX high and blocks new transmit requests.
+Queued and active TX words finish. Change enable while idle for a clean RX
+boundary. Reset clears pending data and queues, idles the state machines and drives
+TX high.
+
+### Buffer depths
+
+Depths are elaboration-time integers and count FIFO entries, excluding the
+RX assembly register and TX active-word register.
+
+| Setting | Behavior |
+| --- | --- |
+| RX depth 0 | Hold the completed word in the assembly register until consumed. A new confirmed start bit discards an unread word and pulses overflow. The new word becomes readable after successful reception. |
+| RX depth > 0 | Queue completed words in a FIFO. When full, drop the arriving word and pulse overflow. |
+| TX depth 0 | Accept a word when idle and serialize it from the active-word register. |
+| TX depth > 0 | Queue words in a FIFO; release each queue slot when its word starts transmission. |
+
+A false start leaves a held RX word intact. Consuming the held word on the same
+cycle as a confirmed start avoids overflow. Replacement happens at start
+confirmation, even if the new frame later has a framing error. Reception
+continues when the consumer stalls.
+
+TX busy includes queued and active words. RX busy describes reception of a
+frame, it may be false while a completed word is waiting to be read.
+
+## CSR peripheral
+
+`mkUartCsr(rx_depth, tx_depth)` provides a 32-bit AXI4-Lite slave through `s_rd`
+and `s_wr`. Both depths must be positive and set the byte queues in `UartRegs`.
+Its RX/TX engines use depth zero. RX can hold one additional completed byte in
+its assembly register while the CSR queue is full. Further frames replace that
+held byte and set overflow; bytes already in the FIFO keep their order.
+
+The register map is generated from `UartRegs` by BlueCSR's
+`doc_blue_csr_markdown`. Regenerate it in the Nix shell with
+`make -C hdl csr_docs`.
+
+"<!-- BEGIN GENERATED CSR MAP -->
+
+| Address | Register | Register Description | Field | Bits | Access | Reset | Field Description |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 0x00 | MIV | Module ID and Version Register | MID | [07:00] | RC | 0xd | Unique ID for this module. |
+|  |  |  | VRS | [23:16] | RC | 0x1 | Module version. |
+| 0x04 | CTRL | UART control register | CTRLEN | [00:00] | RW | 0x0 | Controls whether module is enabled or not. |
+|  |  |  | STOP2 | [01:01] | RW | 0x0 | Controls whether to expect 1 or 2 stop bits. |
+| 0x08 | BAUD | UART prescaler register | BAUD | [15:00] | RW | 0x0 | Clock cycles per UART bit. Zero is treated as one. |
+| 0x0c | STATUS | Module status register | FRERR | [00:00] | W1C | 0x0 | Last reception had malformed frame. |
+|  |  |  | OVFLW | [01:01] | W1C | 0x0 | Received data was dropped or overwritten. |
+|  |  |  | TXBUSY | [08:08] | RO | 0x0 | Transmitter has queued or active data. |
+|  |  |  | RXBUSY | [09:09] | RO | 0x0 | Receiver is processing a frame. |
+|  |  |  | TXREADY | [10:10] | RO | 0x0 | The selected transmit data interface can accept a byte. |
+|  |  |  | RXVALID | [11:11] | RO | 0x0 | Received data is available at the selected data interface. |
+| 0x10 | TXDATA | Transmit data register | DATA | [07:00] | WO | 0x0 | Queues one byte for transmission. |
+| 0x14 | RXDATA | Receive data register | DATA | [07:00] | RO | 0x0 | Dequeues one received byte. |
+
+TXDATA and RXDATA are optional FIFO registers: mkUartCsr includes them;
+the control-only mkUartAxisBridgeCsr uses registers 0x00-0x0c only.
+
+<!-- END GENERATED CSR MAP -->
+
+
+TXBUSY includes the CSR TX queue while disabled. TXREADY/RXVALID describe the
+CSR queues; status registers are sampled each clock.
+
+TXDATA requires byte strobe `0x1`. Invalid strobes, writes to a full TX queue
+and reads from an empty RX queue return AXI `SLVERR`.
+
+## Bridges
+
+Import `UartAxisBridge::*` or `UartAxiLiteMaster::*` as needed.
+
+```bsv
+let i_axis      <- mkUartAxisBridge(stop_bits, prescaler, m_axis_depth, s_axis_depth, rx_depth, tx_depth);
+let i_axis_csr  <- mkUartAxisBridgeCsr(m_axis_depth, s_axis_depth, rx_depth, tx_depth);
+let i_master    <- mkUartAxiLiteMaster(stop_bits, prescaler, rd_depth, wr_depth, rx_depth, tx_depth);
+```
+
+UART depths may be zero. AXIS and AXI adapter queues have separate depth
+parameters.
+
+The AXIS bridge maps UART words to beats and sends incoming beat data over
+UART. The CSR variant adds registers 0x00–0x0c for control/status, with data
+flowing through AXIS. Its TXREADY/RXVALID bits report `S_AXIS.TREADY` and
+`M_AXIS.TVALID`.
+
+The AXI4-Lite master accepts these UART commands. Addresses and data are
+little-endian, sized to the AXI interface widths.
+
+| Command | Request after command byte | AXI operation | UART response |
+| --- | --- | --- | --- |
+| 0x00 | Address | Read | Status, then data |
+| 0x01 | Address, data | Write, all byte strobes asserted | Status |
+| Other | — | — | 0x02 |
+
+Status is `0x00` for AXI `OKAY` and `0x01` for a bus error. Transactions use
+`UNPRIV_SECURE_DATA`. Commands execute sequentially.
+
+## FPGA examples
+
+The Cmod A7 examples use a 12 MHz clock, two LEDs and USB-UART pins defined in
+`hdl/script/constr.xdc`. Vivado is required for synthesis and bitstreams.
 
 ```sh
 make -C hdl \
@@ -81,106 +150,44 @@ make -C hdl \
   vivado_tcl
 ```
 
-`MAIN_MODULE` is the path relative to `hdl/src`, without the `.bsv` suffix.
-For this script, `PROJECT_NAME` must match the synthesized Verilog top module.
+Set `MAIN_MODULE` to the source path under `hdl/src`, without `.bsv`.
+`PROJECT_NAME` and `TOP_MODULE` must name the same Verilog top.
 
-## Modules 
+## FPGA usage
 
-### UART RX
-
-- `mkUartRx` samples a serial input into a FIFO-backed receive stream.
-- Includes input synchronization, baud timing, frame/overflow pulses, and
-  configurable stop-bit handling.
-- `mkUartRxBuffered` exposes the output FIFO depth; `mkUartRx` keeps the legacy
-  2-deep FIFO.
-
-### UART TX
-
-- `mkUartTx` serializes FIFO-backed transmit words onto `tx`.
-- Uses the configured prescaler and one/two stop-bit mode.
-- `mkUartTxBuffered` exposes the transmit FIFO depth.
-
-### UART Core
-
-- `mkUartCore` combines one RX, one TX, and a BlueCSR-backed AXI4-Lite slave.
-- CSRs control enable, prescaler, and stop-bit mode.
-- Status CSRs expose RX/TX state and errors; data FIFO CSRs can be disabled.
-
-For UART-core builds with CSR-accessible data FIFOs, the register map is:
-
-| Address | Register | Register Description | Field | Bits | Access | Reset | Field Description |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 0x00 | MIV | Module ID and Version Register | MID | [07:00] | RC | 0xd | Unique ID for this module. |
-|  |  |  | VRS | [23:16] | RC | 0x1 | Module version. |
-| 0x04 | CTRL | UART control register | CTRLEN | [00:00] | RW | 0x0 | Controls whether module is enabled or not. |
-|  |  |  | STOP2 | [01:01] | RW | 0x0 | Controls whether to expect 1 or 2 stop bits. |
-| 0x08 | BAUD | UART prescaler register | BAUD | [15:00] | RW | 0x0 | Clock cycles per UART bit. Zero is treated as one. |
-| 0x0c | STATUS | Module status register | FRERR | [00:00] | W1C | 0x0 | Last reception had malformed frame. |
-|  |  |  | OVFLW | [01:01] | W1C | 0x0 | Last reception could not be stored in buffer. |
-|  |  |  | TXBUSY | [08:08] | RO | 0x0 | Transmitter has queued or active data. |
-|  |  |  | RXBUSY | [09:09] | RO | 0x0 | Receiver is processing a frame. |
-|  |  |  | TXREADY | [10:10] | RO | 0x0 | TXDATA can accept a byte. |
-|  |  |  | RXVALID | [11:11] | RO | 0x0 | RXDATA contains a byte. |
-| 0x10 | TXDATA | Transmit data register | DATA | [07:00] | WO | 0x0 | Queues one byte for transmission. |
-| 0x14 | RXDATA | Receive data register | DATA | [07:00] | RO | 0x0 | Dequeues one received byte. |
-
-When `csr_fifos` is `False`, `TXDATA` and `RXDATA` are not present; the core's
-external `receive` and `transmit` streams are used instead.
-
-### UART AXIS Bridge
-
-- `mkUartAxisBridge` maps UART bytes to AXI4-Stream beats and AXI4-Stream beats
-  to UART transmit bytes.
-- Uses internal UART RX/TX FIFOs plus AXIS read/write adapter FIFOs.
-- `mkUartAxisBridgeBuffered` exposes the UART FIFO depths.
-
-### UART AXI4-Lite Master
-
-- `mkUartAxiLiteMaster` converts UART command bytes into AXI4-Lite reads and
-  writes.
-- UART commands are byte-oriented; AXI address/data widths are type parameters.
-- `mkUartAxiLiteMasterBuffered` exposes AXI channel and UART RX/TX buffer
-  depths.
-
-Command contract:
-
-| Command | UART request bytes | AXI action | UART response bytes |
-| --- | --- | --- | --- |
-| Read `0x00` | command, little-endian address | AXI4-Lite read with `prot = UNPRIV_SECURE_DATA` | status, little-endian read data |
-| Write `0x01` | command, little-endian address, little-endian data | AXI4-Lite write with `strb = all ones` and `prot = UNPRIV_SECURE_DATA` | status |
-| Other | command | no AXI transaction | `0x02` |
-
-Status is `0x00` for AXI `OKAY`, `0x01` for any non-`OKAY` AXI response, and
-`0x02` for an unknown command byte. The master processes commands
-sequentially; deeper buffers absorb UART/AXI timing mismatch but do not make
-the command parser issue multiple logical commands in parallel.
-
-### Baud Generator
-
-- `mkBaudGen` is the shared prescaler counter used by RX and TX.
-- A frame bit lasts `prescaler` clocks after load; zero is treated as one.
-- RX uses the middle-of-bit pulse for sampling; TX uses the top-of-bit pulse to
-  advance serialization.
-
-## Synthesis Overview
-
-These out-of-context, post-synthesis Vivado 2025.2 reports use the BSVTools
-`vivado_tcl` target for `xc7a35tcpg236-1` at 100 MHz. They do not include I/O
-buffers, placement, routing, or bitstream generation. UART reference wrappers
-use 8-bit words, one stop bit, and prescaler 868 for approximately 115200 baud.
+Vivado 2025.2, Bluespec 2024.07 from the Nix flake, `xc7a35tcpg236-1`, 100 MHz.
+These are out-of-context synthesis results; WNS is estimated slack before
+placement and routing. Fixed UART settings are one stop bit and prescaler 868;
+CSR variants retain runtime configuration. All entries use zero BRAM and DSP
+blocks. Depths count FIFO entries as described above.
 
 | Module | Wrapper top | Configuration | LUTs | FFs | WNS at 100 MHz |
-| --- | --- | --- | ---: | --: | ---: |
-| UART RX | `mkUsageUartRxMin` | 8-bit word, 1-deep RX FIFO | 57 | 48 | 2.616 ns |
-| UART RX | `mkUsageUartRxMax` | 8-bit word, 16-deep RX FIFO | 86 | 58 | 2.616 ns |
-| UART TX | `mkUsageUartTxMin` | 8-bit word, 1-deep TX FIFO | 53 | 39 | 2.413 ns |
-| UART TX | `mkUsageUartTxMax` | 8-bit word, 16-deep TX FIFO | 85 | 49 | 2.225 ns |
-| UART core | `mkUsageUartCoreMin` | 8-bit RX/TX, 1-deep UART FIFOs, 32-bit CSR | 662 | 432 | 1.258 ns |
-| UART core | `mkUsageUartCoreMax` | 8-bit RX/TX, 16-deep UART FIFOs, 32-bit CSR | 737 | 452 | 0.507 ns |
-| UART AXIS bridge | `mkUsageUartAxisBridgeMin` | 8-bit stream, 1-deep UART/AXIS FIFOs | 150 | 113 | 2.410 ns |
-| UART AXIS bridge | `mkUsageUartAxisBridgeMax` | 8-bit stream, 16-deep UART, 1-deep AXIS | 211 | 133 | 2.233 ns |
-| UART AXI4-Lite master | `mkUsageUartAxiLiteMasterMin` | 8-bit AXI, 1-deep UART/AXI buffers | 268 | 188 | 1.901 ns |
-| UART AXI4-Lite master | `mkUsageUartAxiLiteMaster8MaxUart` | 8-bit AXI, 16-deep UART, 1-deep AXI | 316 | 208 | 1.643 ns |
-| UART AXI4-Lite master | `mkUsageUartAxiLiteMaster32MinUart` | 32-bit AXI, 1-deep UART/AXI buffers | 496 | 387 | 2.414 ns |
-| UART AXI4-Lite master | `mkUsageUartAxiLiteMasterMax` | 32-bit AXI, 16-deep UART, 1-deep AXI | 570 | 407 | 1.643 ns |
+| --- | --- | --- | ---: | ---: | ---: |
+| UART RX | `mkUsageUartRxMin` | 8-bit, RX depth 0 | 33 | 36 | 5.625 ns |
+| UART RX | `mkUsageUartRxMax` | 8-bit, RX depth 16 | 64 | 54 | 5.422 ns |
+| UART TX | `mkUsageUartTxMin` | 8-bit, TX depth 0 | 32 | 34 | 5.589 ns |
+| UART TX | `mkUsageUartTxMax` | 8-bit, TX depth 16 | 58 | 53 | 5.608 ns |
+| Plain UART core | `mkUsageUartCoreMin` | 8-bit, RX/TX depths 0/0 | 61 | 70 | 5.600 ns |
+| Plain UART core | `mkUsageUartCoreMax` | 8-bit, RX/TX depths 16/16 | 121 | 107 | 5.418 ns |
+| CSR UART | `mkUsageUartCsrMin` | 8-bit, Regs RX/TX depths 1/1 | 517 | 403 | 2.053 ns |
+| CSR UART | `mkUsageUartCsrMax` | 8-bit, Regs RX/TX depths 16/16 | 578 | 423 | 2.075 ns |
+| UART AXIS bridge | `mkUsageUartAxisBridgeMin` | 8-bit, UART/AXIS depths 1/1 | 101 | 113 | 5.600 ns |
+| UART AXIS bridge | `mkUsageUartAxisBridgeMax` | 8-bit, UART depth 16, AXIS depth 1 | 166 | 133 | 5.425 ns |
+| UART AXIS + control CSRs | `mkUsageUartAxisBridgeCsrMin` | 8-bit, UART depth 0, AXIS depth 1 | 506 | 404 | 3.004 ns |
+| UART AXI4-Lite master | `mkUsageUartAxiLiteMasterMin` | 8-bit AXI, UART/AXI depths 1/1 | 214 | 188 | 5.414 ns |
+| UART AXI4-Lite master | `mkUsageUartAxiLiteMaster8MaxUart` | 8-bit AXI, UART depth 16, AXI depth 1 | 269 | 208 | 5.136 ns |
+| UART AXI4-Lite master | `mkUsageUartAxiLiteMaster32MinUart` | 32-bit AXI, UART/AXI depths 1/1 | 455 | 387 | 5.249 ns |
+| UART AXI4-Lite master | `mkUsageUartAxiLiteMasterMax` | 32-bit AXI, UART depth 16, AXI depth 1 | 521 | 407 | 5.267 ns |
+| Narrow plain core | `mkUsageUartNarrow` | 1-bit word, RX/TX depths 0/0 | 47 | 49 | 5.624 ns |
 
+Regenerate the reports from the Nix shell with Vivado on `PATH`:
+
+```sh
+make -C hdl SIM_TYPE=VERILOG compile_top
+blueuart_bsc_lib=$(bsc -help | sed -n 's/^Bluespec directory: //p')
+vivado -mode batch -nojournal -nolog \
+  -source hdl/script/report_usage.tcl \
+  -tclargs hdl/build/verilog "$blueuart_bsc_lib" hdl/build/usage
+```
+
+Utilization, timing and `usage.tsv` reports are written to `hdl/build/usage`.
