@@ -169,11 +169,11 @@ blocks. Depths count FIFO entries as described above.
 | UART TX | `mkUsageUartTxMax` | 8-bit, TX depth 16 | 58 | 53 | 5.608 ns |
 | Plain UART core | `mkUsageUartCoreMin` | 8-bit, RX/TX depths 0/0 | 61 | 70 | 5.600 ns |
 | Plain UART core | `mkUsageUartCoreMax` | 8-bit, RX/TX depths 16/16 | 121 | 107 | 5.418 ns |
-| CSR UART | `mkUsageUartCsrMin` | 8-bit, Regs RX/TX depths 1/1 | 517 | 403 | 2.053 ns |
-| CSR UART | `mkUsageUartCsrMax` | 8-bit, Regs RX/TX depths 16/16 | 578 | 423 | 2.075 ns |
+| CSR UART | `mkUsageUartCsrMin` | 8-bit, Regs RX/TX depths 1/1 | 285 | 347 | 4.051 ns |
+| CSR UART | `mkUsageUartCsrMax` | 8-bit, Regs RX/TX depths 16/16 | 357 | 367 | 2.953 ns |
 | UART AXIS bridge | `mkUsageUartAxisBridgeMin` | 8-bit, UART/AXIS depths 1/1 | 101 | 113 | 5.600 ns |
 | UART AXIS bridge | `mkUsageUartAxisBridgeMax` | 8-bit, UART depth 16, AXIS depth 1 | 166 | 133 | 5.425 ns |
-| UART AXIS + control CSRs | `mkUsageUartAxisBridgeCsrMin` | 8-bit, UART depth 0, AXIS depth 1 | 506 | 404 | 3.004 ns |
+| UART AXIS + control CSRs | `mkUsageUartAxisBridgeCsrMin` | 8-bit, UART depth 0, AXIS depth 1 | 302 | 350 | 4.051 ns |
 | UART AXI4-Lite master | `mkUsageUartAxiLiteMasterMin` | 8-bit AXI, UART/AXI depths 1/1 | 214 | 188 | 5.414 ns |
 | UART AXI4-Lite master | `mkUsageUartAxiLiteMaster8MaxUart` | 8-bit AXI, UART depth 16, AXI depth 1 | 269 | 208 | 5.136 ns |
 | UART AXI4-Lite master | `mkUsageUartAxiLiteMaster32MinUart` | 32-bit AXI, UART/AXI depths 1/1 | 455 | 387 | 5.249 ns |
