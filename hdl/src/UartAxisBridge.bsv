@@ -10,27 +10,27 @@ import UartCore :: *;
 import UartRegs :: *;
 import GetPut :: *;
 
-interface UartAxisBridge#(numeric type datawidth, numeric type userwidth);
+interface UartAxisBridge#(numeric type dw, numeric type uw);
     (* always_enabled *) (* prefix="uart" *)
     method Action rx(Bit#(1) value);
     (* always_ready *) (* result="uart_tx" *)
     method Bit#(1) tx();
 
-    interface AXI4_Stream_Wr_Fab#(datawidth, userwidth) m_axis;
-    interface AXI4_Stream_Rd_Fab#(datawidth, userwidth) s_axis;
+    interface AXI4_Stream_Wr_Fab#(dw, uw) m_axis;
+    interface AXI4_Stream_Rd_Fab#(dw, uw) s_axis;
 
     (* always_ready *) method Bool rx_busy;
     (* always_ready *) method Bool tx_busy;
 endinterface
 
-interface UartAxisBridgeCsr#(numeric type datawidth, numeric type userwidth);
+interface UartAxisBridgeCsr#(numeric type dw, numeric type uw);
     (* always_enabled *) (* prefix="uart" *)
     method Action rx(Bit#(1) value);
     (* always_ready *) (* result="uart_tx" *)
     method Bit#(1) tx();
 
-    (* prefix="M_AXIS" *) interface AXI4_Stream_Wr_Fab#(datawidth, userwidth) m_axis;
-    (* prefix="S_AXIS" *) interface AXI4_Stream_Rd_Fab#(datawidth, userwidth) s_axis;
+    (* prefix="M_AXIS" *) interface AXI4_Stream_Wr_Fab#(dw, uw) m_axis;
+    (* prefix="S_AXIS" *) interface AXI4_Stream_Rd_Fab#(dw, uw) s_axis;
 
     (* prefix="S_AXI_cfg" *) interface AXI4_Lite_Slave_Rd_Fab#(32, 32) s_rd;
     (* prefix="S_AXI_cfg" *) interface AXI4_Lite_Slave_Wr_Fab#(32, 32) s_wr;
@@ -39,8 +39,8 @@ interface UartAxisBridgeCsr#(numeric type datawidth, numeric type userwidth);
     (* always_ready *) method Bool tx_busy;
 endinterface
 
-function AXI4_Stream_Pkg#(datawidth, userwidth) uart_word_to_axis(Bit#(datawidth) data)
-    provisos(Div#(datawidth, 8, keepwidth));
+function AXI4_Stream_Pkg#(dw, uw) uart_word_to_axis(Bit#(dw) data)
+    provisos(Div#(dw, 8, keepwidth));
     return AXI4_Stream_Pkg {
         data: data,
         user: 0,
@@ -51,18 +51,18 @@ function AXI4_Stream_Pkg#(datawidth, userwidth) uart_word_to_axis(Bit#(datawidth
     };
 endfunction
 
-module [Module] mkUartAxisBridge#(Bit#(2) stop_bits, Bit#(16) prescaler, Integer m_axis_buffer, Integer s_axis_buffer, Integer rx_buffer, Integer tx_buffer)(UartAxisBridge#(datawidth, userwidth))
+module [Module] mkUartAxisBridge#(Bit#(2) stop_bits, Bit#(16) prescaler, Integer m_axis_buffer, Integer s_axis_buffer, Integer rx_buffer, Integer tx_buffer)(UartAxisBridge#(dw, uw))
     provisos(
-        Add#(a__, 1, datawidth),
-        Div#(datawidth, 8, keepwidth),
-        Log#(datawidth, datawidth_log),
-        Add#(datawidth_log, 1, datawidth_log1)
+        Add#(a__, 1, dw),
+        Div#(dw, 8, keepwidth),
+        Log#(dw, dw_log),
+        Add#(dw_log, 1, dw_log1)
     );
 
-    UartCore_ifc#(datawidth) i_uart <- mkUartCore(True, stop_bits, prescaler, rx_buffer, tx_buffer);
+    UartCore_ifc#(dw) i_uart <- mkUartCore(True, stop_bits, prescaler, rx_buffer, tx_buffer);
 
-    AXI4_Stream_Wr#(datawidth, userwidth) i_axis_out <- mkAXI4_Stream_Wr(m_axis_buffer);
-    AXI4_Stream_Rd#(datawidth, userwidth) i_axis_in <- mkAXI4_Stream_Rd(s_axis_buffer);
+    AXI4_Stream_Wr#(dw, uw) i_axis_out <- mkAXI4_Stream_Wr(m_axis_buffer);
+    AXI4_Stream_Rd#(dw, uw) i_axis_in <- mkAXI4_Stream_Rd(s_axis_buffer);
 
     rule r_rx_to_axis;
         let data <- i_uart.receive.get();
@@ -83,22 +83,22 @@ module [Module] mkUartAxisBridge#(Bit#(2) stop_bits, Bit#(16) prescaler, Integer
     interface s_axis = i_axis_in.fab;
 endmodule
 
-module [Module] mkUartAxisBridgeCsr#(Integer m_axis_buffer, Integer s_axis_buffer, Integer rx_buffer, Integer tx_buffer)(UartAxisBridgeCsr#(datawidth, userwidth))
+module [Module] mkUartAxisBridgeCsr#(Integer m_axis_buffer, Integer s_axis_buffer, Integer rx_buffer, Integer tx_buffer)(UartAxisBridgeCsr#(dw, uw))
     provisos(
-        Add#(datawidth, 0, 8),
-        Div#(datawidth, 8, keepwidth),
-        Log#(datawidth, datawidth_log),
-        Add#(datawidth_log, 1, datawidth_log1)
+        Add#(dw, 0, 8),
+        Div#(dw, 8, keepwidth),
+        Log#(dw, dw_log),
+        Add#(dw_log, 1, dw_log1)
     );
 
     BlueCSRAccess_ifc#(12, 32, 0, UartControlRegs_ifc)  i_csrs <- create_blue_csr(uart_control_csrs, False);
     BlueCSR_AXI4Lite_ifc#(32, 32, 0)                    i_axi_csrs <- mkBlueCSRAXI4LiteAdapter(i_csrs.external, 1, 1);
     Bit#(2) stop_bits = i_csrs.internal.ctrl_s2 ? 2 : 1;
 
-    UartCore_ifc#(datawidth) i_uart <- mkUartCore(i_csrs.internal.ctrl_en, stop_bits, i_csrs.internal.prescaler, rx_buffer, tx_buffer);
+    UartCore_ifc#(dw) i_uart <- mkUartCore(i_csrs.internal.ctrl_en, stop_bits, i_csrs.internal.prescaler, rx_buffer, tx_buffer);
 
-    AXI4_Stream_Wr#(datawidth, userwidth) i_axis_out <- mkAXI4_Stream_Wr(m_axis_buffer);
-    AXI4_Stream_Rd#(datawidth, userwidth) i_axis_in  <- mkAXI4_Stream_Rd(s_axis_buffer);
+    AXI4_Stream_Wr#(dw, uw) i_axis_out <- mkAXI4_Stream_Wr(m_axis_buffer);
+    AXI4_Stream_Rd#(dw, uw) i_axis_in  <- mkAXI4_Stream_Rd(s_axis_buffer);
 
     rule r_errors;
         i_csrs.internal.frame_error(i_uart.frame_error);
