@@ -23,7 +23,7 @@ interface UartCsr_ifc;
 endinterface
 
 module [Module] mkUartCsr#(Integer rx_depth, Integer tx_depth)(UartCsr_ifc);
-    BlueCSRAccess_ifc#(32, 32, 0, UartRegs_ifc) i_csrs  <- create_blue_csr(uart_csrs(rx_depth, tx_depth), False);
+    BlueCSRAccess_ifc#(12, 32, 0, UartRegs_ifc) i_csrs  <- create_blue_csr(uart_csrs(rx_depth, tx_depth), False);
     BlueCSR_AXI4Lite_ifc#(32, 32, 0)            i_axi   <- mkBlueCSRAXI4LiteAdapter(i_csrs.external, 1, 1);
 
     Bit#(2) stop_bits = i_csrs.internal.control.ctrl_s2 ? 2 : 1;

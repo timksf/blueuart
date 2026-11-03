@@ -74,6 +74,10 @@ The register map is generated from `UartRegs` by BlueCSR's
 `doc_blue_csr_markdown`. Regenerate it in the Nix shell with
 `make -C hdl csr_docs`.
 
+The AXI4-Lite CSR port is 32 bits wide, but only the low 12 address bits are
+decoded. Map the UART to a 4 KiB region so the interconnect decodes the rest,
+otherwise the register map repeats every 4 KiB.
+
 "<!-- BEGIN GENERATED CSR MAP -->
 
 | Address | Register | Register Description | Field | Bits | Access | Reset | Field Description |
@@ -169,11 +173,11 @@ blocks. Depths count FIFO entries as described above.
 | UART TX | `mkUsageUartTxMax` | 8-bit, TX depth 16 | 58 | 53 | 5.608 ns |
 | Plain UART core | `mkUsageUartCoreMin` | 8-bit, RX/TX depths 0/0 | 61 | 70 | 5.600 ns |
 | Plain UART core | `mkUsageUartCoreMax` | 8-bit, RX/TX depths 16/16 | 121 | 107 | 5.418 ns |
-| CSR UART | `mkUsageUartCsrMin` | 8-bit, Regs RX/TX depths 1/1 | 285 | 347 | 4.051 ns |
-| CSR UART | `mkUsageUartCsrMax` | 8-bit, Regs RX/TX depths 16/16 | 357 | 367 | 2.953 ns |
+| CSR UART | `mkUsageUartCsrMin` | 8-bit, Regs RX/TX depths 1/1 | 254 | 287 | 4.051 ns |
+| CSR UART | `mkUsageUartCsrMax` | 8-bit, Regs RX/TX depths 16/16 | 300 | 307 | 3.549 ns |
 | UART AXIS bridge | `mkUsageUartAxisBridgeMin` | 8-bit, UART/AXIS depths 1/1 | 101 | 113 | 5.600 ns |
 | UART AXIS bridge | `mkUsageUartAxisBridgeMax` | 8-bit, UART depth 16, AXIS depth 1 | 166 | 133 | 5.425 ns |
-| UART AXIS + control CSRs | `mkUsageUartAxisBridgeCsrMin` | 8-bit, UART depth 0, AXIS depth 1 | 302 | 350 | 4.051 ns |
+| UART AXIS + control CSRs | `mkUsageUartAxisBridgeCsrMin` | 8-bit, UART depth 0, AXIS depth 1 | 257 | 290 | 4.051 ns |
 | UART AXI4-Lite master | `mkUsageUartAxiLiteMasterMin` | 8-bit AXI, UART/AXI depths 1/1 | 214 | 188 | 5.414 ns |
 | UART AXI4-Lite master | `mkUsageUartAxiLiteMaster8MaxUart` | 8-bit AXI, UART depth 16, AXI depth 1 | 269 | 208 | 5.136 ns |
 | UART AXI4-Lite master | `mkUsageUartAxiLiteMaster32MinUart` | 32-bit AXI, UART/AXI depths 1/1 | 455 | 387 | 5.249 ns |

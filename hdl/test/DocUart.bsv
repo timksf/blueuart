@@ -6,7 +6,7 @@ import BlueCSRCore :: *;
 import BlueCSRExport :: *;
 import UartRegs :: *;
 
-module [BlueCSRCtx_t#(32, 32)] uart_doc_csrs(UartRegs_ifc);
+module [BlueCSRCtx_t#(12, 32)] uart_doc_csrs(UartRegs_ifc);
     // Queue depths do not change the register map.
     UartRegs_ifc i_regs <- uart_csrs(1, 1);
 

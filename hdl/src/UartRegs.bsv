@@ -32,7 +32,7 @@ interface UartRegs_ifc;
     method Action rx_data_enq(Bit#(8) data);
 endinterface
 
-module [BlueCSRCtx_t#(32, 32)] uart_control_csrs(UartControlRegs_ifc);
+module [BlueCSRCtx_t#(12, 32)] uart_control_csrs(UartControlRegs_ifc);
 
     Reg#(Bool)      rg_ctrl_en;
     Reg#(Bool)      rg_ctrl_s2;
@@ -84,7 +84,7 @@ endmodule
 
 // Only the full CSR peripheral owns byte queues. Control-only users instantiate
 // uart_control_csrs, so they do not allocate unused data FIFOs.
-module [BlueCSRCtx_t#(32, 32)] uart_csrs#(Integer rx_depth, Integer tx_depth)(UartRegs_ifc);
+module [BlueCSRCtx_t#(12, 32)] uart_csrs#(Integer rx_depth, Integer tx_depth)(UartRegs_ifc);
     if(rx_depth <= 0 || tx_depth <= 0)
         error("UART CSR FIFO depths must be positive");
 

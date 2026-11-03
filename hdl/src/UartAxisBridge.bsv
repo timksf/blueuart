@@ -91,15 +91,14 @@ module [Module] mkUartAxisBridgeCsr#(Integer m_axis_buffer, Integer s_axis_buffe
         Add#(datawidth_log, 1, datawidth_log1)
     );
 
-    BlueCSRAccess_ifc#(32, 32, 0, UartControlRegs_ifc) i_csrs <-
-        create_blue_csr(uart_control_csrs, False);
-    BlueCSR_AXI4Lite_ifc#(32, 32, 0) i_axi_csrs <- mkBlueCSRAXI4LiteAdapter(i_csrs.external, 1, 1);
+    BlueCSRAccess_ifc#(12, 32, 0, UartControlRegs_ifc)  i_csrs <- create_blue_csr(uart_control_csrs, False);
+    BlueCSR_AXI4Lite_ifc#(32, 32, 0)                    i_axi_csrs <- mkBlueCSRAXI4LiteAdapter(i_csrs.external, 1, 1);
     Bit#(2) stop_bits = i_csrs.internal.ctrl_s2 ? 2 : 1;
-    UartCore_ifc#(datawidth) i_uart <- mkUartCore(
-        i_csrs.internal.ctrl_en, stop_bits, i_csrs.internal.prescaler, rx_buffer, tx_buffer);
+
+    UartCore_ifc#(datawidth) i_uart <- mkUartCore(i_csrs.internal.ctrl_en, stop_bits, i_csrs.internal.prescaler, rx_buffer, tx_buffer);
 
     AXI4_Stream_Wr#(datawidth, userwidth) i_axis_out <- mkAXI4_Stream_Wr(m_axis_buffer);
-    AXI4_Stream_Rd#(datawidth, userwidth) i_axis_in <- mkAXI4_Stream_Rd(s_axis_buffer);
+    AXI4_Stream_Rd#(datawidth, userwidth) i_axis_in  <- mkAXI4_Stream_Rd(s_axis_buffer);
 
     rule r_errors;
         i_csrs.internal.frame_error(i_uart.frame_error);
