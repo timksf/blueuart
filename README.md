@@ -76,7 +76,7 @@ The AXI4-Lite CSR port is 32 bits wide, but only the low 12 address bits are
 decoded. Map the UART to a 4 KiB region so the interconnect decodes the rest,
 otherwise the register map repeats every 4 KiB.
 
-"<!-- BEGIN GENERATED CSR MAP -->
+<!-- BEGIN GENERATED CSR MAP -->
 
 | Address | Register | Register Description | Field | Bits | Access | Reset | Field Description |
 | --- | --- | --- | --- | --- | --- | --- | --- |
