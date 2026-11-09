@@ -54,13 +54,11 @@ RX assembly register and TX active-word register.
 | TX depth 0 | Accept a word when idle and serialize it from the active-word register. |
 | TX depth > 0 | Queue words in a FIFO; release each queue slot when its word starts transmission. |
 
-A false start leaves a held RX word intact. Consuming the held word on the same
-cycle as a confirmed start avoids overflow. Replacement happens at start
-confirmation, even if the new frame later has a framing error. Reception
-continues when the consumer stalls.
-
-TX busy includes queued and active words. RX busy describes reception of a
-frame, it may be false while a completed word is waiting to be read.
+- a false start on the RX line leaves a held RX word intact. Consuming the held word on the same cycle as a confirmed start avoids overflow
+- replacement happens at start confirmation, even if the new frame later has a framing error
+- reception continues when the consumer stalls -> overflow
+- TX busy includes queued and active words
+- RX busy describes reception of a frame, it may be false while a completed word is waiting to be read
 
 ## CSR peripheral
 
@@ -138,32 +136,9 @@ little-endian, sized to the AXI interface widths.
 Status is `0x00` for AXI `OKAY` and `0x01` for a bus error. Transactions use
 `UNPRIV_SECURE_DATA`. Commands execute sequentially.
 
-## FPGA examples
-
-The Cmod A7 examples use a 12 MHz clock, two LEDs and USB-UART pins defined in
-`hdl/script/constr.xdc`. Vivado is required for synthesis and bitstreams.
-
-```sh
-make -C hdl \
-  MAIN_MODULE=fpga/TestFpgaUartAxiLiteMaster \
-  TOP_MODULE=mkUartAxiLiteMasterFpga \
-  PROJECT_NAME=mkUartAxiLiteMasterFpga \
-  SIM_TYPE=VERILOG \
-  PART="--part xc7a35tcpg236-1" \
-  SCRIPT="--script $PWD/hdl/script/synth_fpga.tcl" \
-  vivado_tcl
-```
-
-Set `MAIN_MODULE` to the source path under `hdl/src`, without `.bsv`.
-`PROJECT_NAME` and `TOP_MODULE` must name the same Verilog top.
-
 ## FPGA usage
 
-Vivado 2025.2, Bluespec 2024.07 from the Nix flake, `xc7a35tcpg236-1`, 100 MHz.
-These are out-of-context synthesis results; WNS is estimated slack before
-placement and routing. Fixed UART settings are one stop bit and prescaler 868;
-CSR variants retain runtime configuration. All entries use zero BRAM and DSP
-blocks. Depths count FIFO entries as described above.
+These are out-of-context synthesis results, fixed UART settings are one stop bit and prescaler 868
 
 | Module | Wrapper top | Configuration | LUTs | FFs | WNS at 100 MHz |
 | --- | --- | --- | ---: | ---: | ---: |
@@ -183,15 +158,3 @@ blocks. Depths count FIFO entries as described above.
 | UART AXI4-Lite master | `mkUsageUartAxiLiteMaster32MinUart` | 32-bit AXI, UART/AXI depths 1/1 | 455 | 387 | 5.249 ns |
 | UART AXI4-Lite master | `mkUsageUartAxiLiteMasterMax` | 32-bit AXI, UART depth 16, AXI depth 1 | 521 | 407 | 5.267 ns |
 | Narrow plain core | `mkUsageUartNarrow` | 1-bit word, RX/TX depths 0/0 | 47 | 49 | 5.624 ns |
-
-Regenerate the reports from the Nix shell with Vivado on `PATH`:
-
-```sh
-make -C hdl SIM_TYPE=VERILOG compile_top
-blueuart_bsc_lib=$(bsc -help | sed -n 's/^Bluespec directory: //p')
-vivado -mode batch -nojournal -nolog \
-  -source hdl/script/report_usage.tcl \
-  -tclargs hdl/build/verilog "$blueuart_bsc_lib" hdl/build/usage
-```
-
-Utilization, timing and `usage.tsv` reports are written to `hdl/build/usage`.
